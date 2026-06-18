@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bounty Scorer | owockibot.xyz</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0f; color: #e0e0e0; min-height: 100vh; }
+    .container { max-width: 900px; margin: 0 auto; padding: 2rem; }
+    h1 { font-size: 2rem; margin-bottom: 0.5rem; background: linear-gradient(135deg, #00d4ff, #7b2fff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .subtitle { color: #888; margin-bottom: 2rem; }
+    .card { background: #14141f; border: 1px solid #2a2a3a; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
+    label { display: block; font-weight: 600; margin-bottom: 0.5rem; color: #aaa; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    input[type="text"], textarea { width: 100%; background: #0d0d1a; border: 1px solid #2a2a3a; border-radius: 8px; padding: 0.75rem 1rem; color: #fff; font-size: 1rem; transition: border-color 0.2s; }
+    input:focus, textarea:focus { outline: none; border-color: #00d4ff; }
+    textarea { min-height: 120px; resize: vertical; font-family: inherit; }
+    button { background: linear-gradient(135deg, #00d4ff, #7b2fff); color: #fff; border: none; padding: 0.85rem 2rem; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; width: 100%; margin-top: 1rem; transition: opacity 0.2s; }
+    button:hover { opacity: 0.9; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .score-ring { width: 140px; height: 140px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; font-weight: 800; margin: 0 auto 1rem; position: relative; }
+    .score-ring::before { content: ''; position: absolute; inset: 0; border-radius: 50%; border: 6px solid #2a2a3a; }
+    .score-good { background: radial-gradient(circle, #0a2a1a, transparent); color: #00ff88; border-color: #00ff88 !important; }
+    .score-mid { background: radial-gradient(circle, #2a2a0a, transparent); color: #ffdd00; }
+    .score-bad { background: radial-gradient(circle, #2a0a0a, transparent); color: #ff4444; }
+    .breakdown-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin: 1rem 0; }
+    .breakdown-item { background: #0d0d1a; border-radius: 8px; padding: 1rem; text-align: center; }
+    .breakdown-item .val { font-size: 1.5rem; font-weight: 700; }
+    .breakdown-item .lbl { font-size: 0.75rem; color: #888; margin-top: 0.25rem; }
+    .req-item { background: #0d0d1a; border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center; }
+    .req-item.pass { border-left: 3px solid #00ff88; }
+    .req-item.fail { border-left: 3px solid #ff4444; }
+    .req-item.partial { border-left: 3px solid #ffdd00; }
+    .badge { padding: 0.2rem 0.6rem; border-radius: 99px; font-size: 0.75rem; font-weight: 600; }
+    .badge-pass { background: #0a2a1a; color: #00ff88; }
+    .badge-fail { background: #2a0a0a; color: #ff4444; }
+    .badge-partial { background: #2a2a0a; color: #ffdd00; }
+    .spam-item { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.4rem; }
+    .severity-high { color: #ff4444; }
+    .severity-medium { color: #ffdd00; }
+    .severity-low { color: #888; }
+    .feedback-item { padding: 0.5rem 0; border-bottom: 1px solid #1a1a2a; }
+    .feedback-item:last-child { border-bottom: none; }
+    .low-effort-banner { background: #2a0a0a; border: 1px solid #ff4444; border-radius: 8px; padding: 1rem; text-align: center; color: #ff4444; font-weight: 700; margin-bottom: 1rem; }
+    #results { display: none; }
+    .loading { text-align: center; padding: 2rem; color: #888; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>⚔️ Bounty Scorer</h1>
+    <p class="subtitle">Automated quality scoring for owockibot.xyz bounty submissions</p>
+
+    <div class="card">
+      <label>Submission URL</label>
+      <input type="text" id="urlInput" placeholder="https://github.com/user/repo or live URL" />
+
+      <label style="margin-top:1rem">Bounty Requirements (one per line)</label>
+      <textarea id="reqsInput" placeholder="Build a REST API endpoint that accepts POST requests\nInclude authentication middleware\nAdd unit tests with 80% coverage\nDeploy to a public URL"></textarea>
+
+      <button id="scoreBtn" onclick="runScore()">Score Submission</button>
+    </div>
+
+    <div id="loading" class="loading" style="display:none">⏳ Analyzing submission...</div>
+
+    <div id="results">
+      <div id="lowEffortBanner" class="low-effort-banner" style="display:none">🚨 LOW-EFFORT / SPAM FLAG — Score below 30</div>
+
+      <div class="card" style="text-align:center">
+        <div id="scoreRing" class="score-ring"></div>
+        <div style="color:#888;font-size:0.85rem">Quality Score</div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-bottom:1rem">Score Breakdown</h3>
+        <div id="breakdown" class="breakdown-grid"></div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-bottom:1rem">URL Status</h3>
+        <div id="liveness"></div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-bottom:1rem">Requirements Coverage</h3>
+        <div id="reqsList"></div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-bottom:1rem">Spam / Quality Signals</h3>
+        <div id="spamList"></div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-bottom:1rem">Feedback</h3>
+        <div id="feedbackList"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function runScore() {
+      const url = document.getElementById('urlInput').value.trim();
+      const reqs = document.getElementById('reqsInput').value.trim();
+      if (!url || !reqs) return alert('Please fill in both fields');
+      document.getElementById('scoreBtn').disabled = true;
+      document.getElementById('loading').style.display = 'block';
+      document.getElementById('results').style.display = 'none';
+      try {
+        const res = await fetch('/api/score', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ submissionUrl: url, requirements: reqs })
+        });
+        const data = await res.json();
+        renderResults(data);
+      } catch (e) {
+        alert('Error: ' + e.message);
+      } finally {
+        document.getElementById('scoreBtn').disabled = false;
+        document.getElementById('loading').style.display = 'none';
+      }
+    }
+
+    function renderResults(d) {
+      document.getElementById('results').style.display = 'block';
+      // Score ring
+      const ring = document.getElementById('scoreRing');
+      ring.textContent = d.score;
+      ring.className = 'score-ring ' + (d.score >= 70 ? 'score-good' : d.score >= 40 ? 'score-mid' : 'score-bad');
+      // Low effort banner
+      document.getElementById('lowEffortBanner').style.display = d.isLowEffort ? 'block' : 'none';
+      // Breakdown
+      document.getElementById('breakdown').innerHTML = `
+        <div class="breakdown-item"><div class="val" style="color:#00d4ff">${d.breakdown.livenessPoints}</div><div class="lbl">Liveness (max 20)</div></div>
+        <div class="breakdown-item"><div class="val" style="color:#7b2fff">${d.breakdown.requirementPoints}</div><div class="lbl">Requirements (max 50)</div></div>
+        <div class="breakdown-item"><div class="val" style="color:#00ff88">${d.breakdown.contentDepthPoints}</div><div class="lbl">Depth (max 15)</div></div>
+        <div class="breakdown-item"><div class="val" style="color:#ff4444">-${d.breakdown.spamPenalty}</div><div class="lbl">Spam Penalty (max -15)</div></div>
+      `;
+      // Liveness
+      document.getElementById('liveness').innerHTML = d.liveness.live
+        ? '<span style="color:#00ff88">✅ Live</span> — HTTP ' + d.liveness.statusCode
+        : '<span style="color:#ff4444">❌ Unreachable</span>';
+      // Requirements
+      document.getElementById('reqsList').innerHTML = d.requirements.map(r => {
+        const cls = r.satisfied ? 'pass' : r.coverage > 0 ? 'partial' : 'fail';
+        const badge = r.satisfied ? '<span class="badge badge-pass">PASS</span>' : r.coverage > 0 ? '<span class="badge badge-partial">' + r.coverage + '%</span>' : '<span class="badge badge-fail">FAIL</span>';
+        return '<div class="req-item ' + cls + '"><div>' + r.requirement + '</div>' + badge + '</div>';
+      }).join('');
+      // Spam
+      document.getElementById('spamList').innerHTML = d.spamSignals.length === 0
+        ? '<div style="color:#00ff88">✅ No spam signals detected</div>'
+        : d.spamSignals.map(s => '<div class="spam-item"><span class="severity-' + s.severity + '">' + (s.severity === 'high' ? '🔴' : s.severity === 'medium' ? '🟡' : '⚪') + '</span><span>' + s.signal + '</span></div>').join('');
+      // Feedback
+      document.getElementById('feedbackList').innerHTML = d.feedback.map(f => '<div class="feedback-item">' + f + '</div>').join('');
+    }
+  </script>
+</body>
+</html>
